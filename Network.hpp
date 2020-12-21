@@ -27,6 +27,17 @@
 
 namespace network {
 
+    class SocketException : public std::exception {
+
+        private:
+            std::string _message;
+
+        public:
+            explicit SocketException(const std::string& message) : _message(message) {}
+            ~SocketException(){}
+            const char*  what() { return _message.c_str(); }
+    };
+
     //Throw socket related exceptions and expose details about errno.
     static inline std::string RaiseSocketException(const char* customMessage) {
         std::stringstream ss;
@@ -48,24 +59,12 @@ namespace network {
         }
     }
 
-    class SocketException : public std::exception {
-
-        private:
-            std::string _message;
-
-        public:
-            explicit SocketException(const std::string& message) : _message(message) {}
-            ~SocketException(){}
-            const char*  what() { return _message.c_str(); }
-    };
-
     /*
     Interface for socket system call is:
 
          int socket(int domain, int type, int protocol)
 
-    Here we make use of system call getaddrinfo,and
-     won't allow manually setting these values,
+    Here we make use of system call getaddrinfo, to skip manually setting these values
     */
     class Socket {
 
@@ -77,21 +76,22 @@ namespace network {
         public:
             
             int Descriptor() const { return _descriptor; }
-            std::string Address() const { return _address; }
-            int Port() const { return _port; }
             int Family() const { return _family; }
             int Type() const { return _type; }
+            std::string Address() const { return _address; }
+            uint16_t Port() const { return _port; }
+            
 
         protected:
 
             int _descriptor;
             int _type;                      //SOCK_STREAM, SOCK_DGRAM
             int _family;                        //AF_INET, AF_INET6
-            int _port;
+            uint16_t _port;
             char _address[INET6_ADDRSTRLEN];
             struct addrinfo* _addrinfo;
 
-            Socket(const char* address, int port, int stype, bool block = true)
+            Socket(const char* address, uint16_t port, int stype, bool block = true)
                 : _port(port) {
 
                 struct addrinfo hints, *result, *p;
@@ -112,7 +112,8 @@ namespace network {
                 int sockfd, yes = 1;
                 for (p = result; p != NULL; p = p->ai_next)
                 {
-                    if (sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol) == -1) {
+                    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+                        perror("Error: socket: ");
                         continue;
                     }
                     //Make this port reusable
@@ -146,6 +147,14 @@ namespace network {
                 inet_ntop(p->ai_family, p->ai_addr, _address, sizeof(_address));
             }
 
+            Socket(int descriptor, const struct sockaddr* rawSockAddr, int stype) {
+                _descriptor = descriptor;
+                ParseSockAddr(rawSockAddr, _address, &_port);
+
+                _family = rawSockAddr->sa_family;
+                _type = stype;
+            }
+
              ~Socket(){
                 if (_descriptor != -1) {
                     close(_descriptor);
@@ -162,14 +171,16 @@ namespace network {
     class CommunicationSocket : public Socket {
 
         public:
-            static CommunicationSocket* Connect(const char* remoteAddr, int remotePort, int stype = SOCK_STREAM) {
+            static CommunicationSocket* Connect(const char* remoteAddr, uint16_t remotePort, int stype = SOCK_STREAM) {
                 CommunicationSocket* sock = new CommunicationSocket(remoteAddr, remotePort, stype);
                 if (connect(sock->_descriptor, sock->_addrinfo->ai_addr, sock->_addrinfo->ai_addrlen) == -1) {
                     RaiseSocketException("Error when connect: ");
                 }
+
+                return sock;
             }
 
-            CommunicationSocket(const char* addr, int port, int protocol, bool block = true)
+            CommunicationSocket(const char* addr, uint16_t port, int protocol, bool block = true)
                 : Socket(addr, port, protocol, block) { }
 
             virtual ~CommunicationSocket() {}
@@ -207,12 +218,17 @@ namespace network {
                 }
                 return _recv;
             }
+
+        protected:
+            CommunicationSocket(int descriptor, const struct sockaddr* rawSockAddr, int stype)
+                : Socket(descriptor, rawSockAddr, stype) {
+            }
     };
 
     class TcpSocket : public CommunicationSocket {
 
         public:
-            TcpSocket(const char* address, int port, bool block = true)
+            TcpSocket(const char* address, uint16_t port, bool block = true)
                 : CommunicationSocket(address, port, SOCK_STREAM, block) {
                     
             }
@@ -226,6 +242,24 @@ namespace network {
                 if (listen(_descriptor, backLog) == -1) {
                     RaiseSocketException("Error when listen: ");
                 }
+            }
+
+            TcpSocket* Accept() {
+                struct sockaddr_storage remoteAddr;
+                socklen_t remoteAddrSize = sizeof(remoteAddr);
+
+                int new_fd = accept(_descriptor, (struct sockaddr*)&remoteAddr, &remoteAddrSize);
+                if (new_fd == -1) {
+                    RaiseSocketException("Error when accept: ");
+                }
+                return new TcpSocket(new_fd, (struct sockaddr*)&remoteAddr);
+            }
+
+        private:
+
+            TcpSocket(int descriptor, const struct sockaddr* rawSockAddr) 
+                : CommunicationSocket(descriptor, rawSockAddr, SOCK_STREAM) {
+
             }
     };
 
@@ -248,7 +282,7 @@ namespace network {
                 return _sent;
             }
 
-            bool SendAllTo(const void* buffer, int bufferLen, const struct sockaddr* sa) {
+            bool SendAllTo(const char* buffer, int bufferLen, const struct sockaddr* sa) {
                 int sent = 0;
                 int left = bufferLen;
 
