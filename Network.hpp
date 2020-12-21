@@ -113,7 +113,6 @@ namespace network {
                 for (p = result; p != NULL; p = p->ai_next)
                 {
                     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-                        perror("Error: socket: ");
                         continue;
                     }
                     //Make this port reusable
