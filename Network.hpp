@@ -1,6 +1,6 @@
 /*
 *   Network support shared by both server and client. 
-*   This contains TCP/UDP Socket model wrapping around C and various system calls
+*   This contains TCP/UDP Socket model wrapping around C based system calls
 *
 *   Author: Fu Qiao 
 *   Email:  qiaofuphysics@gmail.com
@@ -50,12 +50,12 @@ namespace network {
         if (sa->sa_family == AF_INET) {
             struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)sa;
             inet_ntop(sa->sa_family, &(ipv4_addr->sin_addr), addr, sizeof(addr));
-            *port = ipv4_addr->sin_port;
+            *port = ntohs(ipv4_addr->sin_port); // convert to host byte order
         }
         else {
             struct sockaddr_in6* ipv6_addr = (struct sockaddr_in6*)sa;
             inet_ntop(sa->sa_family, &(ipv6_addr->sin6_addr), addr, sizeof(addr));
-            *port = ipv6_addr->sin6_port;
+            *port = ntohs(ipv6_addr->sin6_port); // convert to host byte order
         }
     }
 
@@ -81,7 +81,6 @@ namespace network {
             std::string Address() const { return _address; }
             uint16_t Port() const { return _port; }
             
-
         protected:
 
             int _descriptor;
@@ -187,7 +186,6 @@ namespace network {
             CommunicationSocket(const CommunicationSocket& other) = delete;
             CommunicationSocket& operator=(const CommunicationSocket& other) = delete;
 
-            
             int Send(const void* buffer, int bufferLen) {
                 int sent;
                 if ((sent = send(_descriptor, buffer, bufferLen, 0)) == -1) {
