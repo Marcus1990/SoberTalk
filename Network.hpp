@@ -169,6 +169,7 @@ namespace network {
     class CommunicationSocket : public Socket {
 
         public:
+
             static CommunicationSocket* Connect(const char* remoteAddr, uint16_t remotePort, int stype = SOCK_STREAM) {
                 CommunicationSocket* sock = new CommunicationSocket(remoteAddr, remotePort, stype);
                 if (connect(sock->_descriptor, sock->_addrinfo->ai_addr, sock->_addrinfo->ai_addrlen) == -1) {
@@ -178,14 +179,17 @@ namespace network {
                 return sock;
             }
 
-            CommunicationSocket(const char* addr, uint16_t port, int protocol, bool block = true)
-                : Socket(addr, port, protocol, block) { }
+        protected:
 
-            virtual ~CommunicationSocket() {}
+            CommunicationSocket(const char* addr, uint16_t port, int stype, bool block = true)
+                : Socket(addr, port, stype, block) { }
+
+            ~CommunicationSocket() {}
 
             CommunicationSocket(const CommunicationSocket& other) = delete;
             CommunicationSocket& operator=(const CommunicationSocket& other) = delete;
 
+        public:
             int Send(const void* buffer, int bufferLen) {
                 int sent;
                 if ((sent = send(_descriptor, buffer, bufferLen, 0)) == -1) {
