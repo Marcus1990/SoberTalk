@@ -24,6 +24,7 @@
 #include <string.h>
 #include <string>
 #include <sstream>
+#include <iostream>
 
 namespace network {
 
@@ -87,7 +88,7 @@ namespace network {
             int _type;                      //SOCK_STREAM, SOCK_DGRAM
             int _family;                        //AF_INET, AF_INET6
             uint16_t _port;
-            char _address[INET6_ADDRSTRLEN];
+            std::string _address;
             struct addrinfo* _addrinfo;
 
             Socket(const char* address, uint16_t port, int stype, bool block = true)
@@ -109,6 +110,8 @@ namespace network {
                 }
 
                 int sockfd, yes = 1;
+                void* addr;
+                char _addrStr[INET6_ADDRSTRLEN];
                 for (p = result; p != NULL; p = p->ai_next)
                 {
                     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
@@ -125,6 +128,23 @@ namespace network {
                             RaiseSocketException("Error when bind ");
                         }
                     }
+
+                    //ParseSockAddr(p->ai_addr, _address, &_port);
+                    
+                    if (p->ai_family == AF_INET) { // IPv4
+			            struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+			            addr = &(ipv4->sin_addr);
+		            } else { // IPv6
+			            struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
+			            addr = &(ipv6->sin6_addr);
+		            }
+                    
+		            // convert the IP to a string and print it:
+		            inet_ntop(p->ai_family, addr, _addrStr, sizeof(_addrStr));
+
+                    _address = _addrStr;
+
+                    std::cout << "Addr: " << _address << std::endl;
                     break;
                 }
 
@@ -142,12 +162,12 @@ namespace network {
                 }
 
                 memcpy(_addrinfo, p, sizeof(struct addrinfo));
-                inet_ntop(p->ai_family, p->ai_addr, _address, sizeof(_address));
+                //inet_ntop(p->ai_family, p->ai_addr, _address, sizeof(_address));
             }
 
             Socket(int descriptor, const struct sockaddr* rawSockAddr, int stype) {
                 _descriptor = descriptor;
-                ParseSockAddr(rawSockAddr, _address, &_port);
+                //ParseSockAddr(rawSockAddr, _address, &_port);
 
                 _family = rawSockAddr->sa_family;
                 _type = stype;
@@ -248,11 +268,24 @@ namespace network {
             TcpSocket* Accept() {
                 struct sockaddr_storage remoteAddr;
                 socklen_t remoteAddrSize = sizeof(remoteAddr);
+                struct sockaddr* sockAddr = (struct sockaddr*)&remoteAddr;
+                char _addr_[INET6_ADDRSTRLEN];
 
-                int new_fd = accept(_descriptor, (struct sockaddr*)&remoteAddr, &remoteAddrSize);
+                int new_fd = accept(_descriptor, sockAddr, &remoteAddrSize);
                 if (new_fd == -1) {
                     RaiseSocketException("Error when accept: ");
                 }
+
+                if (remoteAddr.ss_family == AF_INET) {
+
+                    struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)sockAddr;
+                    inet_ntop(sockAddr->sa_family, &(ipv4_addr->sin_addr), _addr_, sizeof(_addr_));
+                } else {
+                    struct sockaddr_in6* ipv6_addr = (struct sockaddr_in6*)sockAddr;
+                    inet_ntop(sockAddr->sa_family, &(ipv6_addr->sin6_addr), _addr_, sizeof(_addr_));
+                }
+                _address = _addr_;
+                std::cout << "Addr: " << _address << std::endl;
                 return new TcpSocket(new_fd, (struct sockaddr*)&remoteAddr);
             }
 
