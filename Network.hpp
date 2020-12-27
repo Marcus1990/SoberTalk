@@ -24,7 +24,6 @@
 #include <string.h>
 #include <string>
 #include <sstream>
-#include <iostream>
 
 namespace network {
 
@@ -71,6 +70,11 @@ namespace network {
 
         private:
 
+            int _type;                      //SOCK_STREAM, SOCK_DGRAM
+            int _family;                        //AF_INET, AF_INET6
+            uint16_t _port;
+            std::string _ip_address;
+
             Socket(const Socket& other);
             Socket& operator=(const Socket& other);
 
@@ -79,17 +83,14 @@ namespace network {
             int Descriptor() const { return _descriptor; }
             int Family() const { return _family; }
             int Type() const { return _type; }
-            std::string Address() const { return _address; }
+            std::string Address() const { return _ip_address; }
             uint16_t Port() const { return _port; }
             
         protected:
 
             int _descriptor;
-            int _type;                      //SOCK_STREAM, SOCK_DGRAM
-            int _family;                        //AF_INET, AF_INET6
-            uint16_t _port;
-            std::string _address;
-            struct addrinfo* _addrinfo;
+            struct sockaddr* _sockaddr;
+            socklen_t _addrlen;
 
             Socket(const char* address, uint16_t port, int stype, bool block = true)
                 : _port(port) {
@@ -111,7 +112,7 @@ namespace network {
 
                 int sockfd, yes = 1;
                 void* addr;
-                char _addrStr[INET6_ADDRSTRLEN];
+                char _ip_addr_str[INET6_ADDRSTRLEN];
                 for (p = result; p != NULL; p = p->ai_next)
                 {
                     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
@@ -129,8 +130,6 @@ namespace network {
                         }
                     }
 
-                    //ParseSockAddr(p->ai_addr, _address, &_port);
-                    
                     if (p->ai_family == AF_INET) { // IPv4
 			            struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
 			            addr = &(ipv4->sin_addr);
@@ -138,13 +137,11 @@ namespace network {
 			            struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
 			            addr = &(ipv6->sin6_addr);
 		            }
-                    
-		            // convert the IP to a string and print it:
-		            inet_ntop(p->ai_family, addr, _addrStr, sizeof(_addrStr));
 
-                    _address = _addrStr;
-
-                    std::cout << "Addr: " << _address << std::endl;
+		            inet_ntop(p->ai_family, addr, _ip_addr_str, sizeof(_ip_addr_str));
+                    _ip_address = _ip_addr_str;
+                    _family = p->ai_family;
+                    _addrlen = p->ai_addrlen;
                     break;
                 }
 
@@ -154,23 +151,16 @@ namespace network {
                     RaiseSocketException("Error when creating socket: ");
                 }
 
-                _addrinfo = (struct addrinfo*)malloc(sizeof(struct addrinfo));
-                _family = p->ai_family;
-
-                if (_addrinfo == NULL) {
-                    RaiseSocketException("Error when creating socket: ");
+                _sockaddr = (struct sockaddr*)malloc(sizeof(struct sockaddr));
+                if (_sockaddr == NULL) {
+                    RaiseSocketException("Error when keeping sockaddr info: ");
                 }
-
-                memcpy(_addrinfo, p, sizeof(struct addrinfo));
-                //inet_ntop(p->ai_family, p->ai_addr, _address, sizeof(_address));
+                memcpy(_sockaddr, p->ai_addr, sizeof(struct sockaddr));
             }
 
-            Socket(int descriptor, const struct sockaddr* rawSockAddr, int stype) {
-                _descriptor = descriptor;
-                //ParseSockAddr(rawSockAddr, _address, &_port);
+            Socket(int descriptor, const std::string& ipAddr, int16_t port, int family, int stype)
+                 : _descriptor(descriptor), _ip_address(ipAddr), _port(port), _family(family), _type(stype) {
 
-                _family = rawSockAddr->sa_family;
-                _type = stype;
             }
 
              ~Socket(){
@@ -179,9 +169,9 @@ namespace network {
                     _descriptor = -1;
                 }
                 
-                if (_addrinfo != NULL) {
-                    free(_addrinfo);
-                    _addrinfo = NULL;
+                if (_sockaddr != NULL) {
+                    free(_sockaddr);
+                    _sockaddr = NULL;
                 }
             }
     };
@@ -192,7 +182,7 @@ namespace network {
 
             static CommunicationSocket* Connect(const char* remoteAddr, uint16_t remotePort, int stype = SOCK_STREAM) {
                 CommunicationSocket* sock = new CommunicationSocket(remoteAddr, remotePort, stype);
-                if (connect(sock->_descriptor, sock->_addrinfo->ai_addr, sock->_addrinfo->ai_addrlen) == -1) {
+                if (connect(sock->_descriptor, sock->_sockaddr, sock->_addrlen) == -1) {
                     RaiseSocketException("Error when connect: ");
                 }
 
@@ -241,8 +231,9 @@ namespace network {
             }
 
         protected:
-            CommunicationSocket(int descriptor, const struct sockaddr* rawSockAddr, int stype)
-                : Socket(descriptor, rawSockAddr, stype) {
+
+            CommunicationSocket(int descriptor, const std::string& ipAddr, int16_t port, int family, int stype) 
+                : Socket(descriptor, ipAddr, port, family, stype ) {
             }
     };
 
@@ -269,7 +260,8 @@ namespace network {
                 struct sockaddr_storage remoteAddr;
                 socklen_t remoteAddrSize = sizeof(remoteAddr);
                 struct sockaddr* sockAddr = (struct sockaddr*)&remoteAddr;
-                char _addr_[INET6_ADDRSTRLEN];
+                char addr[INET6_ADDRSTRLEN];
+                int16_t port;
 
                 int new_fd = accept(_descriptor, sockAddr, &remoteAddrSize);
                 if (new_fd == -1) {
@@ -279,21 +271,22 @@ namespace network {
                 if (remoteAddr.ss_family == AF_INET) {
 
                     struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)sockAddr;
-                    inet_ntop(sockAddr->sa_family, &(ipv4_addr->sin_addr), _addr_, sizeof(_addr_));
+                    inet_ntop(sockAddr->sa_family, &(ipv4_addr->sin_addr), addr, sizeof(addr));
+                    port = ntohs(ipv4_addr->sin_port);
+
                 } else {
                     struct sockaddr_in6* ipv6_addr = (struct sockaddr_in6*)sockAddr;
-                    inet_ntop(sockAddr->sa_family, &(ipv6_addr->sin6_addr), _addr_, sizeof(_addr_));
+                    inet_ntop(sockAddr->sa_family, &(ipv6_addr->sin6_addr), addr, sizeof(addr));
+                    port = ntohs(ipv6_addr->sin6_port);
                 }
-                _address = _addr_;
-                std::cout << "Addr: " << _address << std::endl;
-                return new TcpSocket(new_fd, (struct sockaddr*)&remoteAddr);
+
+                return new TcpSocket(new_fd, addr, port, remoteAddr.ss_family);
             }
 
         private:
 
-            TcpSocket(int descriptor, const struct sockaddr* rawSockAddr) 
-                : CommunicationSocket(descriptor, rawSockAddr, SOCK_STREAM) {
-
+            TcpSocket(int descriptor, const std::string& ipAddr, int16_t port, int family) 
+                : CommunicationSocket(descriptor, ipAddr, port, family, SOCK_STREAM) {
             }
     };
 
