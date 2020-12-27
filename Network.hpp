@@ -45,16 +45,15 @@ namespace network {
         throw SocketException(ss.str());
     }
 
-    //Always declare sa as char[INET6_ADDRLEN]
     static inline void ParseSockAddr(const struct sockaddr* sa, char* addr, uint16_t* port) {
         if (sa->sa_family == AF_INET) {
             struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)sa;
-            inet_ntop(sa->sa_family, &(ipv4_addr->sin_addr), addr, sizeof(addr));
+            inet_ntop(sa->sa_family, &(ipv4_addr->sin_addr), addr, INET6_ADDRSTRLEN);
             *port = ntohs(ipv4_addr->sin_port); // convert to host byte order
         }
         else {
             struct sockaddr_in6* ipv6_addr = (struct sockaddr_in6*)sa;
-            inet_ntop(sa->sa_family, &(ipv6_addr->sin6_addr), addr, sizeof(addr));
+            inet_ntop(sa->sa_family, &(ipv6_addr->sin6_addr), addr, INET6_ADDRSTRLEN);
             *port = ntohs(ipv6_addr->sin6_port); // convert to host byte order
         }
     }
@@ -113,6 +112,7 @@ namespace network {
                 int sockfd, yes = 1;
                 void* addr;
                 char _ip_addr_str[INET6_ADDRSTRLEN];
+                uint16_t _port_;
                 for (p = result; p != NULL; p = p->ai_next)
                 {
                     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
@@ -130,15 +130,7 @@ namespace network {
                         }
                     }
 
-                    if (p->ai_family == AF_INET) { // IPv4
-			            struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
-			            addr = &(ipv4->sin_addr);
-		            } else { // IPv6
-			            struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
-			            addr = &(ipv6->sin6_addr);
-		            }
-
-		            inet_ntop(p->ai_family, addr, _ip_addr_str, sizeof(_ip_addr_str));
+                    ParseSockAddr(p->ai_addr, _ip_addr_str, &_port);
                     _ip_address = _ip_addr_str;
                     _family = p->ai_family;
                     _addrlen = p->ai_addrlen;
@@ -261,25 +253,14 @@ namespace network {
                 socklen_t remoteAddrSize = sizeof(remoteAddr);
                 struct sockaddr* sockAddr = (struct sockaddr*)&remoteAddr;
                 char addr[INET6_ADDRSTRLEN];
-                int16_t port;
+                uint16_t port;
 
                 int new_fd = accept(_descriptor, sockAddr, &remoteAddrSize);
                 if (new_fd == -1) {
                     RaiseSocketException("Error when accept: ");
                 }
 
-                if (remoteAddr.ss_family == AF_INET) {
-
-                    struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)sockAddr;
-                    inet_ntop(sockAddr->sa_family, &(ipv4_addr->sin_addr), addr, sizeof(addr));
-                    port = ntohs(ipv4_addr->sin_port);
-
-                } else {
-                    struct sockaddr_in6* ipv6_addr = (struct sockaddr_in6*)sockAddr;
-                    inet_ntop(sockAddr->sa_family, &(ipv6_addr->sin6_addr), addr, sizeof(addr));
-                    port = ntohs(ipv6_addr->sin6_port);
-                }
-
+                ParseSockAddr(sockAddr, addr, &port);
                 return new TcpSocket(new_fd, addr, port, remoteAddr.ss_family);
             }
 
