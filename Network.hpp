@@ -45,6 +45,7 @@ namespace network {
         throw SocketException(ss.str());
     }
 
+    //Always make addr as char[INET6_ADDRSTRLEN];
     static inline void ParseSockAddr(const struct sockaddr* sa, char* addr, uint16_t* port) {
         if (sa->sa_family == AF_INET) {
             struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)sa;
@@ -152,7 +153,21 @@ namespace network {
 
             Socket(int descriptor, const std::string& ipAddr, int16_t port, int family, int stype)
                  : _descriptor(descriptor), _ip_address(ipAddr), _port(port), _family(family), _type(stype) {
+            }
 
+            Socket(int descriptor, const struct sockaddr* raw_sockaddr, int stype = SOCK_STREAM)
+                : _descriptor(descriptor), _type(stype) {
+                
+                char _ip_addr_str[INET6_ADDRSTRLEN];
+                ParseSockAddr(raw_sockaddr, _ip_addr_str, &_port);
+                _ip_address = _ip_addr_str;
+                _family = raw_sockaddr->sa_family;
+
+                _sockaddr = (struct sockaddr*)malloc(sizeof(struct sockaddr));
+                if (_sockaddr == NULL) {
+                    RaiseSocketException("Error when keeping sockaddr info: ");
+                }
+                memcpy(_sockaddr, raw_sockaddr, sizeof(struct sockaddr));
             }
 
              ~Socket(){
@@ -227,6 +242,10 @@ namespace network {
             CommunicationSocket(int descriptor, const std::string& ipAddr, int16_t port, int family, int stype) 
                 : Socket(descriptor, ipAddr, port, family, stype ) {
             }
+
+            CommunicationSocket(int descriptor, const struct sockaddr* raw_sockaddr, int stype)
+                : Socket(descriptor, raw_sockaddr, stype) {
+            }
     };
 
     class TcpSocket : public CommunicationSocket {
@@ -252,22 +271,19 @@ namespace network {
                 struct sockaddr_storage remoteAddr;
                 socklen_t remoteAddrSize = sizeof(remoteAddr);
                 struct sockaddr* sockAddr = (struct sockaddr*)&remoteAddr;
-                char addr[INET6_ADDRSTRLEN];
-                uint16_t port;
 
                 int new_fd = accept(_descriptor, sockAddr, &remoteAddrSize);
                 if (new_fd == -1) {
                     RaiseSocketException("Error when accept: ");
                 }
 
-                ParseSockAddr(sockAddr, addr, &port);
-                return new TcpSocket(new_fd, addr, port, remoteAddr.ss_family);
+                return new TcpSocket(new_fd, sockAddr);
             }
 
         private:
 
-            TcpSocket(int descriptor, const std::string& ipAddr, int16_t port, int family) 
-                : CommunicationSocket(descriptor, ipAddr, port, family, SOCK_STREAM) {
+            TcpSocket(int descriptor, const struct sockaddr* raw_sockaddr)
+                : CommunicationSocket(descriptor, raw_sockaddr, SOCK_STREAM) {
             }
     };
 
