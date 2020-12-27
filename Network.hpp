@@ -163,6 +163,7 @@ namespace network {
                 ParseSockAddr(raw_sockaddr, _ip_addr_str, &_port);
                 _ip_address = _ip_addr_str;
                 _family = raw_sockaddr->sa_family;
+                _addrlen = _family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
                 SaveSockAddr(raw_sockaddr);
             }
 
