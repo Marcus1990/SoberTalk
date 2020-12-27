@@ -78,6 +78,18 @@ namespace network {
             Socket(const Socket& other);
             Socket& operator=(const Socket& other);
 
+            void SaveSockAddr(const struct sockaddr* raw_sockaddr) {
+                if (_sockaddr != NULL) {
+                    memset(_sockaddr, 0, sizeof(struct sockaddr));
+                } else {
+                    _sockaddr = (struct sockaddr*)malloc(sizeof(struct sockaddr));
+                    if (_sockaddr == NULL) {
+                        RaiseSocketException("Error when saving sockaddr: ");
+                    }
+                }
+                memcpy(_sockaddr, raw_sockaddr, sizeof(struct sockaddr));
+            }
+
         public:
             
             int Descriptor() const { return _descriptor; }
@@ -132,29 +144,18 @@ namespace network {
                     }
 
                     ParseSockAddr(p->ai_addr, _ip_addr_str, &_port);
+                    SaveSockAddr(p->ai_addr);
                     _ip_address = _ip_addr_str;
                     _family = p->ai_family;
                     _addrlen = p->ai_addrlen;
+        
                     break;
                 }
 
                 freeaddrinfo(result);
-
-                if (p == NULL) {
-                    RaiseSocketException("Error when creating socket: ");
-                }
-
-                _sockaddr = (struct sockaddr*)malloc(sizeof(struct sockaddr));
-                if (_sockaddr == NULL) {
-                    RaiseSocketException("Error when keeping sockaddr info: ");
-                }
-                memcpy(_sockaddr, p->ai_addr, sizeof(struct sockaddr));
             }
 
-            Socket(int descriptor, const std::string& ipAddr, int16_t port, int family, int stype)
-                 : _descriptor(descriptor), _ip_address(ipAddr), _port(port), _family(family), _type(stype) {
-            }
-
+            //Used by Accept only
             Socket(int descriptor, const struct sockaddr* raw_sockaddr, int stype = SOCK_STREAM)
                 : _descriptor(descriptor), _type(stype) {
                 
@@ -162,12 +163,7 @@ namespace network {
                 ParseSockAddr(raw_sockaddr, _ip_addr_str, &_port);
                 _ip_address = _ip_addr_str;
                 _family = raw_sockaddr->sa_family;
-
-                _sockaddr = (struct sockaddr*)malloc(sizeof(struct sockaddr));
-                if (_sockaddr == NULL) {
-                    RaiseSocketException("Error when keeping sockaddr info: ");
-                }
-                memcpy(_sockaddr, raw_sockaddr, sizeof(struct sockaddr));
+                SaveSockAddr(raw_sockaddr);
             }
 
              ~Socket(){
@@ -238,10 +234,6 @@ namespace network {
             }
 
         protected:
-
-            CommunicationSocket(int descriptor, const std::string& ipAddr, int16_t port, int family, int stype) 
-                : Socket(descriptor, ipAddr, port, family, stype ) {
-            }
 
             CommunicationSocket(int descriptor, const struct sockaddr* raw_sockaddr, int stype)
                 : Socket(descriptor, raw_sockaddr, stype) {
