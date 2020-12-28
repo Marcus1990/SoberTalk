@@ -7,24 +7,35 @@
 #ifndef __COMMON_DATA_TYPES_HPP__
 #define __COMMON_DATA_TYPES_HPP__
 
+#define TCP_PORT 8517   //TCP for message transmission
+#define UDP_PORT 9487   //UDP for periodic status/new messages check
+#define HEARTBEAT_RATE 5
+#define SERVER_ADDRESS "linuxhost-0.westus.cloudapp.azure.com"
+
+
 namespace common {
 
-    // All types of messages that clients send to server
-    enum class ClientMessageTyp {
+    enum class MessageType {
 
-        REGISTRATION,
+        CREATE_USER,
 
-        LOGIN,
+        DELETE_USER,
+        
+        PUSH_MESSAGE,
 
-        LOGOUT,
+        POLL_MESSAGE,
 
-        PULL,
+        ADD_FRIEND,
 
-        POST
+        DELETE_FRIEND,
+
+        REGULAR_CHECK,
+
+        CHANGE_STATUS
     };
 
-    enum class ClientStatusType{
-        
+    enum class ClientStatus {
+
         ONLINE,
 
         OFFLINE

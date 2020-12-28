@@ -252,7 +252,7 @@ namespace network {
             TcpSocket(const TcpSocket& other) = delete;
             TcpSocket& operator=(const TcpSocket& other) = delete;
 
-            void Listen(int backLog) {
+            void Listen(int backLog = SOMAXCONN) {
                 if (listen(_descriptor, backLog) == -1) {
                     RaiseSocketException("Error when listen: ");
                 }
