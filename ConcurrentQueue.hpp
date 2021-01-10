@@ -10,58 +10,61 @@
 
 namespace common {
 
-    template <typename T>
-    class ConcurrentQueue {
+  template <typename T>
+  class ConcurrentQueue {
 
-        private:
-            mutable std::mutex _mutex;
-            std::queue<T> _queue;
+  private:
+    mutable std::mutex _mutex;
+    std::queue<T> _queue;
 
-        public:
+  public:
+    ConcurrentQueue() {}
+    ~ConcurrentQueue() {}
 
-            ConcurrentQueue(){}
-            ~ConcurrentQueue(){}
+    ConcurrentQueue(const ConcurrentQueue &other) {
+      if (this != &other)
+      {
+        std::lock_guard<std::mutex> guard(other._mutex);
+        _queue = other._queue;
+      }
+    }
 
-            ConcurrentQueue(const ConcurrentQueue& other) {
-                if (this != &other) {
-                    std::lock_guard<std::mutex> guard(other._mutex);
-                    _queue = other._queue;
-                }
-            }
+    ConcurrentQueue &operator=(const ConcurrentQueue &other) {
+      if (this != &other)
+      {
+        std::lock_guard<std::mutex> guard(other._mutex);
+        _queue = other._queue;
+      }
+      return *this;
+    }
 
-            ConcurrentQueue& operator=(const ConcurrentQueue& other) {
-                if (this != &other) {
-                    std::lock_guard<std::mutex> guard(other._mutex);
-                    _queue = other._queue;
-                }
-                return *this;
-            }
+    void Push(const T &t) {
+      std::lock_guard<std::mutex> guard(_mutex);
+      _queue.push(t);
+    }
 
-            void Push(const T& t) {
-                std::lock_guard<std::mutex> guard(_mutex);
-                _queue.push(t);
-            }
+    void Pop() {
+      std::lock_guard<std::mutex> guard(_mutex);
+      if (!_queue.empty())
+      {
+        _queue.pop();
+      }
+    }
 
-            void Pop() {
-                std::lock_guard<std::mutex> guard(_mutex);
-                if (!_queue.empty()) {
-                    _queue.pop();
-                }
-            }
+    bool Empty() const {
+      std::lock_guard<std::mutex> guard(_mutex);
+      return _queue.empty();
+    }
 
-            bool Empty() const {
-                std::lock_guard<std::mutex> guard(_mutex);
-                return _queue.empty();
-            }
-
-            bool Front(T& t) const {
-                std::lock_guard<std::mutex> guard(_mutex);
-                if (_queue.empty()) {
-                    return false;
-                }
-                t = _queue.front();
-                return true;
-            }
-    };
+    bool Front(T &t) const {
+      std::lock_guard<std::mutex> guard(_mutex);
+      if (_queue.empty())
+      {
+        return false;
+      }
+      t = _queue.front();
+      return true;
+    }
+  };
 }
 #endif

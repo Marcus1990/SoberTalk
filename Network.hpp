@@ -27,37 +27,39 @@
 
 namespace network {
 
-    class SocketException : public std::exception {
+  class SocketException : public std::exception {
 
-        private:
-            std::string _message;
+  private:
+    std::string _message;
 
-        public:
-            explicit SocketException(const std::string& message) : _message(message) {}
-            ~SocketException(){}
-            const char*  what() { return _message.c_str(); }
-    };
+  public:
+    explicit SocketException(const std::string &message) : _message(message) {}
+    ~SocketException() {}
+    const char *what() { return _message.c_str(); }
+  };
 
     //Throw socket related exceptions and expose details about errno.
-    static inline std::string RaiseSocketException(const char* customMessage) {
-        std::stringstream ss;
-        ss << customMessage << " " << strerror(errno);
-        throw SocketException(ss.str());
-    }
+  static inline std::string RaiseSocketException(const char *customMessage) {
+    std::stringstream ss;
+    ss << customMessage << " " << strerror(errno);
+    throw SocketException(ss.str());
+  }
 
-    //Always make addr as char[INET6_ADDRSTRLEN];
-    static inline void ParseSockAddr(const struct sockaddr* sa, char* addr, uint16_t* port) {
-        if (sa->sa_family == AF_INET) {
-            struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)sa;
-            inet_ntop(sa->sa_family, &(ipv4_addr->sin_addr), addr, INET6_ADDRSTRLEN);
-            *port = ntohs(ipv4_addr->sin_port); // convert to host byte order
-        }
-        else {
-            struct sockaddr_in6* ipv6_addr = (struct sockaddr_in6*)sa;
-            inet_ntop(sa->sa_family, &(ipv6_addr->sin6_addr), addr, INET6_ADDRSTRLEN);
-            *port = ntohs(ipv6_addr->sin6_port); // convert to host byte order
-        }
+  //Always make addr as char[INET6_ADDRSTRLEN];
+  static inline void ParseSockAddr(const struct sockaddr *sa, char *addr, uint16_t *port) {
+    if (sa->sa_family == AF_INET)
+    {
+      struct sockaddr_in *ipv4_addr = (struct sockaddr_in *)sa;
+      inet_ntop(sa->sa_family, &(ipv4_addr->sin_addr), addr, INET6_ADDRSTRLEN);
+      *port = ntohs(ipv4_addr->sin_port); // convert to host byte order
     }
+    else
+    {
+      struct sockaddr_in6 *ipv6_addr = (struct sockaddr_in6 *)sa;
+      inet_ntop(sa->sa_family, &(ipv6_addr->sin6_addr), addr, INET6_ADDRSTRLEN);
+      *port = ntohs(ipv6_addr->sin6_port); // convert to host byte order
+    }
+  }
 
     /*
     Interface for socket system call is:
@@ -66,260 +68,271 @@ namespace network {
 
     Here we make use of system call getaddrinfo, to skip manually setting these values
     */
-    class Socket {
+  class Socket {
 
-        private:
+  private:
+    int _type;   //SOCK_STREAM, SOCK_DGRAM
+    int _family; //AF_INET, AF_INET6
+    uint16_t _port;
+    std::string _ip_address;
 
-            int _type;                      //SOCK_STREAM, SOCK_DGRAM
-            int _family;                        //AF_INET, AF_INET6
-            uint16_t _port;
-            std::string _ip_address;
+    Socket(const Socket &other);
+    Socket &operator=(const Socket &other);
 
-            Socket(const Socket& other);
-            Socket& operator=(const Socket& other);
+    void SaveSockAddr(const struct sockaddr *raw_sockaddr) {
+      if (_sockaddr != NULL)
+      {
+        memset(_sockaddr, 0, sizeof(struct sockaddr));
+      }
+      else
+      {
+        _sockaddr = (struct sockaddr *)malloc(sizeof(struct sockaddr));
+        if (_sockaddr == NULL)
+        {
+          RaiseSocketException("Error when saving sockaddr: ");
+        }
+      }
+      memcpy(_sockaddr, raw_sockaddr, sizeof(struct sockaddr));
+    }
 
-            void SaveSockAddr(const struct sockaddr* raw_sockaddr) {
-                if (_sockaddr != NULL) {
-                    memset(_sockaddr, 0, sizeof(struct sockaddr));
-                } else {
-                    _sockaddr = (struct sockaddr*)malloc(sizeof(struct sockaddr));
-                    if (_sockaddr == NULL) {
-                        RaiseSocketException("Error when saving sockaddr: ");
-                    }
-                }
-                memcpy(_sockaddr, raw_sockaddr, sizeof(struct sockaddr));
-            }
+  public:
+    int Descriptor() const { return _descriptor; }
+    int Family() const { return _family; }
+    int Type() const { return _type; }
+    std::string Address() const { return _ip_address; }
+    uint16_t Port() const { return _port; }
 
-        public:
-            
-            int Descriptor() const { return _descriptor; }
-            int Family() const { return _family; }
-            int Type() const { return _type; }
-            std::string Address() const { return _ip_address; }
-            uint16_t Port() const { return _port; }
-            
-        protected:
+  protected:
+    int _descriptor;
+    struct sockaddr *_sockaddr;
+    socklen_t _addrlen;
 
-            int _descriptor;
-            struct sockaddr* _sockaddr;
-            socklen_t _addrlen;
+    Socket(const char *address, uint16_t port, int stype, bool block = true) : _port(port) {
 
-            Socket(const char* address, uint16_t port, int stype, bool block = true)
-                : _port(port) {
+      struct addrinfo hints, *result, *p;
 
-                struct addrinfo hints, *result, *p;
+      memset(&hints, 0, sizeof(hints));
+      hints.ai_family = AF_UNSPEC;
+      hints.ai_socktype = stype;
+      if (address == NULL)
+      {
+        hints.ai_flags = AI_PASSIVE; //fill local host address
+      }
 
-                memset(&hints, 0, sizeof(hints));
-                hints.ai_family = AF_UNSPEC;
-                hints.ai_socktype = stype;
-                if (address == NULL)
-                {
-                    hints.ai_flags = AI_PASSIVE;   //fill local host address
-                }
+      int status = getaddrinfo(address, std::to_string(port).c_str(), &hints, &result);
+      if (status != 0)
+      {
+        RaiseSocketException("Error getaddrinfo: ");
+      }
 
-                int status = getaddrinfo(address, std::to_string(port).c_str(), &hints, &result);
-                if (status != 0) {
-                    RaiseSocketException("Error getaddrinfo: " );
-                }
+      int sockfd, yes = 1;
+      char _ip_addr_str[INET6_ADDRSTRLEN];
+      for (p = result; p != NULL; p = p->ai_next)
+      {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+        {
+          continue;
+        }
+        //Make this port reusable
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
+        {
+          RaiseSocketException("Error when setsockopt: ");
+        }
 
-                int sockfd, yes = 1;
-                char _ip_addr_str[INET6_ADDRSTRLEN];
-                for (p = result; p != NULL; p = p->ai_next)
-                {
-                    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-                        continue;
-                    }
-                    //Make this port reusable
-                    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-                        RaiseSocketException("Error when setsockopt: ");
-                    }
+        _descriptor = sockfd;
+        if (address == NULL)
+        { //auto bind if using local host
+          if (bind(_descriptor, p->ai_addr, p->ai_addrlen) == -1)
+          {
+            RaiseSocketException("Error when bind ");
+          }
+        }
 
-                    _descriptor = sockfd;
-                    if (address == NULL) { //auto bind if using local host
-                        if (bind(_descriptor, p->ai_addr, p->ai_addrlen) == -1) {
-                            RaiseSocketException("Error when bind ");
-                        }
-                    }
+        ParseSockAddr(p->ai_addr, _ip_addr_str, &_port);
+        SaveSockAddr(p->ai_addr);
+        _ip_address = _ip_addr_str;
+        _family = p->ai_family;
+        _addrlen = p->ai_addrlen;
 
-                    ParseSockAddr(p->ai_addr, _ip_addr_str, &_port);
-                    SaveSockAddr(p->ai_addr);
-                    _ip_address = _ip_addr_str;
-                    _family = p->ai_family;
-                    _addrlen = p->ai_addrlen;
-        
-                    break;
-                }
+        break;
+      }
 
-                freeaddrinfo(result);
-            }
+      freeaddrinfo(result);
+    }
 
-            //Used by Accept only
-            Socket(int descriptor, const struct sockaddr* raw_sockaddr, int stype = SOCK_STREAM)
-                : _descriptor(descriptor), _type(stype) {
-                
-                char _ip_addr_str[INET6_ADDRSTRLEN];
-                ParseSockAddr(raw_sockaddr, _ip_addr_str, &_port);
-                _ip_address = _ip_addr_str;
-                _family = raw_sockaddr->sa_family;
-                _addrlen = _family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-                SaveSockAddr(raw_sockaddr);
-            }
+    //Used by Accept only
+    Socket(int descriptor, const struct sockaddr *raw_sockaddr, int stype = SOCK_STREAM)
+        : _descriptor(descriptor), _type(stype) {
 
-             ~Socket(){
-                if (_descriptor != -1) {
-                    close(_descriptor);
-                    _descriptor = -1;
-                }
-                
-                if (_sockaddr != NULL) {
-                    free(_sockaddr);
-                    _sockaddr = NULL;
-                }
-            }
-    };
+      char _ip_addr_str[INET6_ADDRSTRLEN];
+      ParseSockAddr(raw_sockaddr, _ip_addr_str, &_port);
+      _ip_address = _ip_addr_str;
+      _family = raw_sockaddr->sa_family;
+      _addrlen = _family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+      SaveSockAddr(raw_sockaddr);
+    }
 
-    class CommunicationSocket : public Socket {
+    ~Socket() {
+      if (_descriptor != -1)
+      {
+        close(_descriptor);
+        _descriptor = -1;
+      }
 
-        public:
+      if (_sockaddr != NULL)
+      {
+        free(_sockaddr);
+        _sockaddr = NULL;
+      }
+    }
+  };
 
-            static CommunicationSocket* Connect(const char* remoteAddr, uint16_t remotePort, int stype = SOCK_STREAM) {
-                CommunicationSocket* sock = new CommunicationSocket(remoteAddr, remotePort, stype);
-                if (connect(sock->_descriptor, sock->_sockaddr, sock->_addrlen) == -1) {
-                    RaiseSocketException("Error when connect: ");
-                }
+  class CommunicationSocket : public Socket {
 
-                return sock;
-            }
+  public:
+    static CommunicationSocket *Connect(const char *remoteAddr, uint16_t remotePort, int stype = SOCK_STREAM) {
+      CommunicationSocket *sock = new CommunicationSocket(remoteAddr, remotePort, stype);
+      if (connect(sock->_descriptor, sock->_sockaddr, sock->_addrlen) == -1)
+      {
+        RaiseSocketException("Error when connect: ");
+      }
 
-        protected:
+      return sock;
+    }
 
-            CommunicationSocket(const char* addr, uint16_t port, int stype, bool block = true)
-                : Socket(addr, port, stype, block) { }
+  protected:
+    CommunicationSocket(const char *addr, uint16_t port, int stype, bool block = true)
+        : Socket(addr, port, stype, block) {}
 
-            ~CommunicationSocket() {}
+    ~CommunicationSocket() {}
 
-            CommunicationSocket(const CommunicationSocket& other) = delete;
-            CommunicationSocket& operator=(const CommunicationSocket& other) = delete;
+    CommunicationSocket(const CommunicationSocket &other) = delete;
+    CommunicationSocket &operator=(const CommunicationSocket &other) = delete;
 
-        public:
-            int Send(const void* buffer, int bufferLen) {
-                int sent;
-                if ((sent = send(_descriptor, buffer, bufferLen, 0)) == -1) {
-                    RaiseSocketException("Error when send: ");
-                }
-                return sent;
-            }
+  public:
+    int Send(const void *buffer, int bufferLen) {
+      int sent;
+      if ((sent = send(_descriptor, buffer, bufferLen, 0)) == -1)
+      {
+        RaiseSocketException("Error when send: ");
+      }
+      return sent;
+    }
 
-            //send all data in buffer and return true on success, otherwise false
-            bool SendAll(const char* buffer, int bufferLen) {
-                int sent = 0;
-                int left = bufferLen;
+    //send all data in buffer and return true on success, otherwise false
+    bool SendAll(const char *buffer, int bufferLen) {
+      int sent = 0;
+      int left = bufferLen;
 
-                while (sent < bufferLen) {
-                    int _n = Send(buffer + sent, left);
-                    sent += _n;
-                    left -= _n;
-                }
+      while (sent < bufferLen)
+      {
+        int _n = Send(buffer + sent, left);
+        sent += _n;
+        left -= _n;
+      }
 
-                return sent == bufferLen ? true : false;
-            }
+      return sent == bufferLen ? true : false;
+    }
 
-            int Recv(void* buffer, int bufferLen) {
-                int _recv = recv(_descriptor, buffer, bufferLen, 0);
-                if (_recv == -1) {
-                    RaiseSocketException("Error when recv: ");
-                }
-                return _recv;
-            }
+    int Recv(void *buffer, int bufferLen) {
+      int _recv = recv(_descriptor, buffer, bufferLen, 0);
+      if (_recv == -1)
+      {
+        RaiseSocketException("Error when recv: ");
+      }
+      return _recv;
+    }
 
-        protected:
+  protected:
+    CommunicationSocket(int descriptor, const struct sockaddr *raw_sockaddr, int stype)
+        : Socket(descriptor, raw_sockaddr, stype) {
+    }
+  };
 
-            CommunicationSocket(int descriptor, const struct sockaddr* raw_sockaddr, int stype)
-                : Socket(descriptor, raw_sockaddr, stype) {
-            }
-    };
+  class TcpSocket : public CommunicationSocket {
 
-    class TcpSocket : public CommunicationSocket {
+  public:
+    TcpSocket(const char *address, uint16_t port, bool block = true)
+        : CommunicationSocket(address, port, SOCK_STREAM, block) {
+    }
 
-        public:
-            TcpSocket(const char* address, uint16_t port, bool block = true)
-                : CommunicationSocket(address, port, SOCK_STREAM, block) {
-                    
-            }
+    ~TcpSocket() {}
 
-            ~TcpSocket() {}
+    TcpSocket(const TcpSocket &other) = delete;
+    TcpSocket &operator=(const TcpSocket &other) = delete;
 
-            TcpSocket(const TcpSocket& other) = delete;
-            TcpSocket& operator=(const TcpSocket& other) = delete;
+    void Listen(int backLog = SOMAXCONN) {
+      if (listen(_descriptor, backLog) == -1)
+      {
+        RaiseSocketException("Error when listen: ");
+      }
+    }
 
-            void Listen(int backLog = SOMAXCONN) {
-                if (listen(_descriptor, backLog) == -1) {
-                    RaiseSocketException("Error when listen: ");
-                }
-            }
+    TcpSocket *Accept() {
+      struct sockaddr_storage remoteAddr;
+      socklen_t remoteAddrSize = sizeof(remoteAddr);
+      struct sockaddr *sockAddr = (struct sockaddr *)&remoteAddr;
 
-            TcpSocket* Accept() {
-                struct sockaddr_storage remoteAddr;
-                socklen_t remoteAddrSize = sizeof(remoteAddr);
-                struct sockaddr* sockAddr = (struct sockaddr*)&remoteAddr;
+      int new_fd = accept(_descriptor, sockAddr, &remoteAddrSize);
+      if (new_fd == -1)
+      {
+        RaiseSocketException("Error when accept: ");
+      }
 
-                int new_fd = accept(_descriptor, sockAddr, &remoteAddrSize);
-                if (new_fd == -1) {
-                    RaiseSocketException("Error when accept: ");
-                }
+      return new TcpSocket(new_fd, sockAddr);
+    }
 
-                return new TcpSocket(new_fd, sockAddr);
-            }
+  private:
+    TcpSocket(int descriptor, const struct sockaddr *raw_sockaddr)
+        : CommunicationSocket(descriptor, raw_sockaddr, SOCK_STREAM) {
+    }
+  };
 
-        private:
+  class UdpSocket : public CommunicationSocket {
 
-            TcpSocket(int descriptor, const struct sockaddr* raw_sockaddr)
-                : CommunicationSocket(descriptor, raw_sockaddr, SOCK_STREAM) {
-            }
-    };
+  public:
+    UdpSocket(const char *address, int port, bool block = true)
+        : CommunicationSocket(address, port, SOCK_DGRAM, block) {
+    }
 
-    class UdpSocket : public CommunicationSocket {
+    ~UdpSocket() {}
+    UdpSocket(const UdpSocket &other) = delete;
+    UdpSocket &operator=(const UdpSocket &other) = delete;
 
-        public:
-            UdpSocket(const char* address, int port, bool block = true)
-                : CommunicationSocket(address, port, SOCK_DGRAM, block) {
-            }
+    int SendTo(const void *buffer, int bufferLen, const struct sockaddr *sa) {
+      int _sent = sendto(_descriptor, buffer, bufferLen, 0, sa, sizeof(struct sockaddr_storage));
+      if (_sent == -1)
+      {
+        RaiseSocketException("Error when sendto: ");
+      }
+      return _sent;
+    }
 
-            ~UdpSocket(){}
-            UdpSocket(const UdpSocket& other) = delete;
-            UdpSocket& operator=(const UdpSocket& other) = delete;
+    bool SendAllTo(const char *buffer, int bufferLen, const struct sockaddr *sa) {
+      int sent = 0;
+      int left = bufferLen;
 
-            int SendTo(const void* buffer, int bufferLen, const struct sockaddr* sa) {
-                int _sent = sendto(_descriptor, buffer, bufferLen, 0, sa, sizeof(struct sockaddr_storage));
-                if (_sent == -1) {
-                    RaiseSocketException("Error when sendto: ");
-                }
-                return _sent;
-            }
+      while (sent < bufferLen)
+      {
+        int _n = SendTo(buffer + sent, left, sa);
+        sent += _n;
+        left -= _n;
+      }
+      return sent == bufferLen ? true : false;
+    }
 
-            bool SendAllTo(const char* buffer, int bufferLen, const struct sockaddr* sa) {
-                int sent = 0;
-                int left = bufferLen;
+    int RecvFrom(void *buffer, int bufferLen, struct sockaddr *sa) {
+      socklen_t remoteAddrSize = sizeof(struct sockaddr_storage);
+      int _recv = recvfrom(_descriptor, buffer, bufferLen, 0, sa, &remoteAddrSize);
 
-                while (sent < bufferLen) {
-                    int _n = SendTo(buffer + sent, left, sa);
-                    sent += _n;
-                    left -= _n;
-                }
-                return sent == bufferLen ? true : false;
-            }
+      if (_recv == -1)
+      {
+        RaiseSocketException("Error when recvfrom: ");
+      }
 
-            int RecvFrom(void* buffer, int bufferLen, struct sockaddr* sa) {
-                socklen_t remoteAddrSize = sizeof(struct sockaddr_storage);
-                int _recv = recvfrom(_descriptor, buffer, bufferLen, 0, sa, &remoteAddrSize);
-
-                if (_recv == -1) {
-                    RaiseSocketException("Error when recvfrom: ");
-                }
-
-                return _recv;
-            }
-    };
+      return _recv;
+    }
+  };
 }
 
 #endif
