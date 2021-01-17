@@ -3,7 +3,7 @@
 *   This contains TCP/UDP Socket model wrapping around C based system calls
 *
 *   Author: Fu Qiao 
-*   Email:  qiaofuphysics@gmail.com
+*   Email:  fqiao@protonmail.com
 *
 */
 

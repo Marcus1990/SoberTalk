@@ -2,7 +2,7 @@
 *   NetworkServiceManager define interfaces for network communication services
 *
 *   Author: Fu Qiao 
-*   Email:  qiaofuphysics@gmail.com
+*   Email:  fqiao@protonmail.com
 *
 */
 
@@ -11,14 +11,15 @@
 
 #include "Network.hpp"
 #include "ConcurrentQueue.hpp"
-#include "CommonDataTypes.hpp"
+#include "NetworkRequest.h"
 #include <memory>
 #include <thread>
-
-using namespace common;
-using namespace network;
+#include <atomic>
+#include <tuple>
 
 namespace sobertalk {
+
+using namespace common;
 
 class NetworkServiceManager {
 
@@ -31,21 +32,25 @@ protected:
 
   std::thread* _thread_out {NULL};
 
+  std::atomic<bool> _should_stop;
+
   virtual void Init() = 0;
 
   NetworkServiceManager(std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_In, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_Out);
 
   ~NetworkServiceManager();
 
+  void SetStop();
+
 public:
   
-  virtual void SendMessage(const SocketMessage& msg) = 0;
+  virtual void HandleRequestOut() = 0;
 
-  virtual void RecvMessage() = 0;
+  virtual void HandleRequestIn() = 0;
 
   virtual void Start() = 0;
 
-  virtual void Stop() = 0;
+  virtual void Stop();
 
 private:
 
