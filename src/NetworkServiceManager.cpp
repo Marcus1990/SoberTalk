@@ -3,6 +3,10 @@
 
 namespace sobertalk {
 
+NetworkServiceManager::NetworkServiceManager(std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_In, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_Out) {
+  Init();
+}
+
 NetworkServiceManager::~NetworkServiceManager() {
   SetStop();
 

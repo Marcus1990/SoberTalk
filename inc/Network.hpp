@@ -299,13 +299,17 @@ namespace network {
     UdpSocket(const UdpSocket &other) = delete;
     UdpSocket &operator=(const UdpSocket &other) = delete;
 
-    int SendTo(const void *buffer, int bufferLen, const struct sockaddr *sa) {
-      int _sent = sendto(_descriptor, buffer, bufferLen, 0, sa, sizeof(struct sockaddr_storage));
+    int SendTo(const void *buffer, int bufferLen, const struct sockaddr *sa, socklen_t addrLen = sizeof(struct sockaddr_storage)) {
+      int _sent = sendto(_descriptor, buffer, bufferLen, 0, sa, addrLen);
       if (_sent == -1)
       {
         RaiseSocketException("Error when sendto: ");
       }
       return _sent;
+    }
+
+    int SendTo(const void *buffer, int bufferLen) {
+      return SendTo(buffer, bufferLen, _sockaddr, _addrlen);
     }
 
     bool SendAllTo(const char *buffer, int bufferLen, const struct sockaddr *sa) {
@@ -321,8 +325,8 @@ namespace network {
       return sent == bufferLen ? true : false;
     }
 
-    int RecvFrom(void *buffer, int bufferLen, struct sockaddr *sa) {
-      socklen_t remoteAddrSize = sizeof(struct sockaddr_storage);
+    int RecvFrom(void *buffer, int bufferLen, struct sockaddr *sa, socklen_t addrLen = sizeof(struct sockaddr_storage)) {
+      socklen_t remoteAddrSize = addrLen;
       int _recv = recvfrom(_descriptor, buffer, bufferLen, 0, sa, &remoteAddrSize);
 
       if (_recv == -1)

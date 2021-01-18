@@ -35,7 +35,6 @@ private:
   void Init() override;
 
   TcpServerNetworkManager(const TcpServerNetworkManager& other);
-
   TcpServerNetworkManager& operator=(const TcpServerNetworkManager& other);
 
   std::unique_ptr<TcpSocket> _listener {nullptr};
