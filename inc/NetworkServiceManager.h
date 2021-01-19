@@ -15,18 +15,18 @@
 #include <memory>
 #include <thread>
 #include <atomic>
-#include <tuple>
 
 namespace sobertalk {
-
-using namespace common;
-
+  
 class NetworkServiceManager {
 
 protected:
-  std::shared_ptr<ConcurrentQueue<SocketMessage>> _queue_in;  
+  using SocketMessage = common::SocketMessage;
+  using SocketMessageQueue = common::ConcurrentQueue<SocketMessage>;
 
-  std::shared_ptr<ConcurrentQueue<SocketMessage>> _queue_out;
+  std::shared_ptr<SocketMessageQueue> _queue_in;  
+
+  std::shared_ptr<SocketMessageQueue> _queue_out;
 
   std::thread* _thread_in {NULL};
 
@@ -36,7 +36,7 @@ protected:
 
   virtual void Init() = 0;
 
-  NetworkServiceManager(std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_In, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_Out);
+  NetworkServiceManager(std::shared_ptr<SocketMessageQueue> queue_In, std::shared_ptr<SocketMessageQueue> queue_Out);
 
   ~NetworkServiceManager();
 

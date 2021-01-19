@@ -11,17 +11,17 @@
 #define __TCP_SERVER_NETWORK_MANAGER_H__
 
 #include "NetworkServiceManager.h"
-#include "Common.hpp"
 #include <atomic>
 
 namespace sobertalk {
 
-using namespace network;
-
 class TcpServerNetworkManager : public NetworkServiceManager {
 
+using TcpSocket = network::TcpSocket;
+using NetworkRequest = common::NetworkRequest;
+
 public:
-  TcpServerNetworkManager(uint16_t port, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_In, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_Out);
+  TcpServerNetworkManager(uint16_t port, std::shared_ptr<SocketMessageQueue> queue_In, std::shared_ptr<SocketMessageQueue> queue_Out);
 
   ~TcpServerNetworkManager();
 

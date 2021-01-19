@@ -10,17 +10,17 @@
 #define __UDP_SERVER_NETWORK_MANAGER_H__
 
 #include "NetworkServiceManager.h"
-#include "Common.hpp"
 #include <atomic>
 
 namespace sobertalk {
 
-using namespace network;
-
 class UdpServerNetworkManager : public NetworkServiceManager {
 
+using UdpSocket = network::UdpSocket;
+using NetworkRequest = common::NetworkRequest;
+
 public:
- UdpServerNetworkManager(uint16_t port, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_In, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_Out);
+ UdpServerNetworkManager(uint16_t port, std::shared_ptr<SocketMessageQueue> queue_In, std::shared_ptr<SocketMessageQueue> queue_Out);
 
  ~UdpServerNetworkManager();
 

@@ -1,10 +1,10 @@
 #include "UdpServerNetworkManager.h"
+#include "Common.hpp"
 
 namespace sobertalk {
 
-UdpServerNetworkManager::UdpServerNetworkManager(uint16_t port, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_In, std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_Out)
+UdpServerNetworkManager::UdpServerNetworkManager(uint16_t port, std::shared_ptr<SocketMessageQueue> queue_In, std::shared_ptr<SocketMessageQueue> queue_Out)
  : NetworkServiceManager(queue_In, queue_Out), _port(port) {
-
 }
 
 UdpServerNetworkManager::~UdpServerNetworkManager() {
@@ -14,11 +14,11 @@ void UdpServerNetworkManager::Init() {
  
  _listener = std::make_unique<UdpSocket>(NULL, _port);
  if (!_queue_in) {
-   _queue_in = std::make_shared<ConcurrentQueue<SocketMessage>>();
+   _queue_in = std::make_shared<SocketMessageQueue>();
  }
 
  if (!_queue_out) {
-   _queue_out = std::make_shared<ConcurrentQueue<SocketMessage>>();
+   _queue_out = std::make_shared<SocketMessageQueue>();
  }
 
  _should_stop = false;
@@ -35,7 +35,7 @@ void UdpServerNetworkManager::HandleRequestIn() {
 
     struct sockaddr* sa = (struct sockaddr *)&ss;
     _listener->RecvFrom(buffer, SOCKET_MSG_BUF_SIZE, sa);
-    ParseSockAddr(sa, addr, &port);
+    network::ParseSockAddr(sa, addr, &port);
 
     auto request = NetworkRequest::FromString(buffer);
     auto ptrUdpSock = std::make_shared<UdpSocket>(addr, port);

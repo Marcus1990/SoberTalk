@@ -1,10 +1,11 @@
 #include "TcpServerNetworkManager.h"
+#include "Common.hpp"
 
 namespace sobertalk {
 
 TcpServerNetworkManager::TcpServerNetworkManager(uint16_t port,
-                                                 std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_In, 
-                                                 std::shared_ptr<ConcurrentQueue<SocketMessage>> queue_Out)
+                                                 std::shared_ptr<SocketMessageQueue> queue_In, 
+                                                 std::shared_ptr<SocketMessageQueue> queue_Out)
   : NetworkServiceManager(queue_In, queue_Out), _port(port) {
   }
 
@@ -47,11 +48,11 @@ void TcpServerNetworkManager::Init() {
   _listener->Listen();
 
   if (!_queue_in) {
-   _queue_in = std::make_shared<ConcurrentQueue<SocketMessage>>();
+   _queue_in = std::make_shared<SocketMessageQueue>();
   }
 
   if (!_queue_out) {
-   _queue_out = std::make_shared<ConcurrentQueue<SocketMessage>>();
+   _queue_out = std::make_shared<SocketMessageQueue>();
   }
   _should_stop = false;
 }
